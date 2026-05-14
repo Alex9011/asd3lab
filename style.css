@@ -3,6 +3,7 @@ body {
   padding: 20px;
   max-width: 1600px;
   margin: 0 auto;
+  background-color: #f6f7fb;
 }
 
 .container {
@@ -28,12 +29,12 @@ body {
 }
 
 canvas {
-  border: 1px solid black;
+  border: 1px solid #2d2d2d;
   display: block;
   margin-top: 10px;
   position: relative;
   z-index: 10;
-  background-color: rgb(212, 218, 248);
+  background-color: #e9effa;
   max-width: 100%;
   height: auto;
 }
@@ -43,25 +44,29 @@ button {
   margin-right: 5px;
   margin-top: 20px;
   cursor: pointer;
-  background-color: #4b4dcdd4;
-  color: rgb(255, 255, 255);
+  background-color: #2f6bd3;
+  color: #ffffff;
   border: none;
-  border-radius: 4px;
+  border-radius: 6px;
   font-size: 14px;
 }
 
+button:hover {
+  background-color: #275bb1;
+}
+
 .matrix-display {
-  background-color: rgb(255, 255, 255);
+  background-color: #ffffff;
   padding: 15px;
-  border-radius: 5px;
-  border: 1px solid #bfbfbf;
+  border-radius: 6px;
+  border: 1px solid #c7c7c7;
   margin-bottom: 15px;
   overflow-x: auto;
 }
 
 .matrix-display h3 {
   margin-top: 0;
-  color: #333;
+  color: #2a2a2a;
 }
 
 .matrix-table {
@@ -85,12 +90,12 @@ button {
 }
 
 h1 {
-  color: #333;
+  color: #2a2a2a;
   margin-bottom: 10px;
 }
 
 h2 {
-  color: #666;
+  color: #505050;
   font-size: 18px;
   margin-top: 20px;
   margin-bottom: 10px;

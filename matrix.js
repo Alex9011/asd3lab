@@ -1,18 +1,17 @@
-function createMatrix(n, seed) {
+function generateBaseMatrix(size, seed) {
   const seedFactory = Math.seedrandom;
-
   const rng = seedFactory(seed.toString());
 
-  const A = [];
-  for (let i = 0; i < n; i++) {
+  const matrix = [];
+  for (let i = 0; i < size; i++) {
     const row = [];
-    for (let j = 0; j < n; j++) {
+    for (let j = 0; j < size; j++) {
       const value = rng() * 2.0;
       row.push(value);
     }
-    A.push(row);
+    matrix.push(row);
   }
-  return A;
+  return matrix;
 }
 
-export default createMatrix;
+export default generateBaseMatrix;
