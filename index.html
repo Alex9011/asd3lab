@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+  <meta charset="UTF-8">
+  <script src="./node_modules/seedrandom/seedrandom.min.js"></script>
+  <title>Візуалізація графів - Лабораторна 3</title>
+  <link rel="stylesheet" href="style.css">
+
+</head>
+
+<body>
+
+  <h1>Лабораторна робота №3  Візуалізація графів</h1>
+
+  <div style="margin-bottom: 20px; text-align: center;">
+    <button id="showDir">Орієнтований граф</button>
+    <button id="showUndir">Неорієнтований граф</button>
+  </div>
+
+  <div class="container">
+    <div class="graph-section">
+      <h2>Візуалізація графа</h2>
+      <canvas id="graph" width="900" height="600"></canvas>
+    </div>
+
+    <div class="matrices-section">
+      <h2>Матриці</h2>
+
+      <div class="matrix-display">
+        <h3>Базова матриця (A)</h3>
+        <div id="baseMatrix"></div>
+      </div>
+
+      <div class="matrix-display">
+        <h3>Матриця орієнтованого графа</h3>
+        <div id="dirMatrix"></div>
+      </div>
+
+      <div class="matrix-display">
+        <h3>Матриця неорієнтованого графа</h3>
+        <div id="undirMatrix"></div>
+      </div>
+    </div>
+  </div>
+
+  <script type="module" src="./mainContent.js"></script>
+
+</body>
+
+</html>
