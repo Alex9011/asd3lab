@@ -9,7 +9,7 @@ try {
 
   const variant = n1 * 1000 + n2 * 100 + n3 * 10 + n4;
   const vertexCount = 10 + n3;
-  const k = 1.0 - n3 * 0.01 - n4 * 0.005 - 0.15;
+  const k = 1.0 - n3 * 0.01 - n4 * 0.005 - 0.05;
 
   const layout = {
     centerX: 450,
@@ -18,7 +18,10 @@ try {
   };
 
   const baseMatrix = createRandomMatrix(vertexCount, variant);
-  const adjacencyMatrix = buildAdjacencyMatrix(baseMatrix, k);
+  const directedAdj = buildAdjacencyMatrix(baseMatrix, k);
+  const undirectedAdj = buildUndirectedAdjacency(directedAdj);
+  const randomWeights = createRandomMatrix(vertexCount, variant);
+  const weightMatrix = buildWeightMatrix(randomWeights, undirectedAdj);
   const positions = buildCircleWithCenter(
     vertexCount,
     layout.centerX,
@@ -26,83 +29,147 @@ try {
     layout.radius,
   );
 
+  const edges = collectEdges(weightMatrix, undirectedAdj);
+  const sortedEdges = [...edges].sort(sortEdges);
+
   const state = {
-    mode: null,
     stepper: null,
-    bfsResult: { order: [], tree: [] },
-    dfsResult: { order: [], tree: [] },
+    edges: sortedEdges,
   };
 
-  renderMatrixTable(adjacencyMatrix, "adjMatrix", true);
+  renderMatrixTable(undirectedAdj, "adjMatrix", true);
+  renderMatrixTable(weightMatrix, "weightMatrix", false);
+  renderSortedEdges(sortedEdges);
+  renderProtocol([]);
   updateRunLabel("Готово до запуску");
-  updateResults(state);
-  renderProtocol([], null);
-  drawGraph(adjacencyMatrix, positions, layout, state);
+  updateCurrentEdge(null, null);
+  updateMstResults([], 0);
+  drawGraph(undirectedAdj, weightMatrix, positions, layout, state);
 
-  const startBfsButton = document.getElementById("startBfs");
-  const startDfsButton = document.getElementById("startDfs");
+  const startButton = document.getElementById("startKruskal");
   const nextStepButton = document.getElementById("nextStep");
   const resetButton = document.getElementById("resetRun");
 
-  startBfsButton.addEventListener("click", () => startTraversal("bfs"));
-  startDfsButton.addEventListener("click", () => startTraversal("dfs"));
+  startButton.addEventListener("click", () => startAlgorithm());
   nextStepButton.addEventListener("click", () => advanceStep());
   resetButton.addEventListener("click", () => resetAll());
 
-  function startTraversal(mode) {
-    state.mode = mode;
-    state.stepper = createStepper(mode, adjacencyMatrix);
-    renderProtocol([], mode);
-    updateRunLabel(mode === "bfs" ? "BFS: старт" : "DFS: старт");
-    if (mode === "bfs") {
-      state.bfsResult = { order: [], tree: [] };
-    } else {
-      state.dfsResult = { order: [], tree: [] };
-    }
-    updateResults(state);
-    drawGraph(adjacencyMatrix, positions, layout, state);
+  function startAlgorithm() {
+    state.stepper = createKruskalStepper(sortedEdges, vertexCount);
+    renderProtocol([]);
+    updateCurrentEdge(null, null);
+    updateMstResults([], 0);
+    updateRunLabel("Краскал: старт");
+    drawGraph(undirectedAdj, weightMatrix, positions, layout, state);
   }
 
   function advanceStep() {
     if (!state.stepper) {
-      alert("Спочатку натисніть Почати BFS або Почати DFS.");
+      alert("Спочатку натисніть Почати алгоритм Краскала.");
       return;
     }
 
     const info = state.stepper.step();
     if (!info.done) {
-      renderProtocol(state.stepper.protocol, state.mode);
+      renderProtocol(state.stepper.protocol);
     }
 
     if (state.stepper.done) {
-      updateRunLabel(
-        state.mode === "bfs" ? "BFS завершено" : "DFS завершено",
-      );
+      updateRunLabel("Краскал завершено");
     } else {
-      updateRunLabel(
-        state.mode === "bfs"
-          ? `BFS: крок ${state.stepper.stepCount}`
-          : `DFS: крок ${state.stepper.stepCount}`,
-      );
+      updateRunLabel(`Крок ${state.stepper.stepCount}`);
     }
 
-    updateResultsFromStepper(state);
-    drawGraph(adjacencyMatrix, positions, layout, state);
+    updateCurrentEdge(state.stepper.currentEdge, state.stepper.lastDecision);
+    updateMstResults(state.stepper.mstEdges, state.stepper.totalWeight);
+    drawGraph(undirectedAdj, weightMatrix, positions, layout, state);
   }
 
   function resetAll() {
-    state.mode = null;
     state.stepper = null;
-    state.bfsResult = { order: [], tree: [] };
-    state.dfsResult = { order: [], tree: [] };
-    updateResults(state);
-    renderProtocol([], null);
+    renderProtocol([]);
     updateRunLabel("Готово до запуску");
-    drawGraph(adjacencyMatrix, positions, layout, state);
+    updateCurrentEdge(null, null);
+    updateMstResults([], 0);
+    drawGraph(undirectedAdj, weightMatrix, positions, layout, state);
   }
 } catch (error) {
   console.error("Помилка при завантаженні:", error);
   alert("Помилка: " + error.message + "\n");
+}
+
+function buildUndirectedAdjacency(directed) {
+  const size = directed.length;
+  const result = directed.map((row) => [...row]);
+
+  for (let i = 0; i < size; i++) {
+    for (let j = 0; j < size; j++) {
+      if (directed[i][j] === 1 || directed[j][i] === 1) {
+        result[i][j] = 1;
+        result[j][i] = 1;
+      }
+    }
+  }
+
+  return result;
+}
+
+function buildWeightMatrix(randomMatrix, adj) {
+  const size = randomMatrix.length;
+  const c = Array.from({ length: size }, () => new Array(size).fill(0));
+  const d = Array.from({ length: size }, () => new Array(size).fill(0));
+  const h = Array.from({ length: size }, () => new Array(size).fill(0));
+  const w = Array.from({ length: size }, () => new Array(size).fill(0));
+
+  for (let i = 0; i < size; i++) {
+    for (let j = 0; j < size; j++) {
+      const value = Math.ceil(randomMatrix[i][j] * 100 * adj[i][j]);
+      c[i][j] = value;
+      d[i][j] = value === 0 ? 0 : 1;
+    }
+  }
+
+  for (let i = 0; i < size; i++) {
+    for (let j = 0; j < size; j++) {
+      h[i][j] = d[i][j] !== d[j][i] ? 1 : 0;
+    }
+  }
+
+  for (let i = 0; i < size; i++) {
+    for (let j = i; j < size; j++) {
+      if (i === j) {
+        w[i][j] = d[i][j] * c[i][j];
+      } else {
+        const value = (d[i][j] + h[i][j]) * c[i][j];
+        w[i][j] = value;
+        w[j][i] = value;
+      }
+    }
+  }
+
+  return w;
+}
+
+function collectEdges(weights, adj) {
+  const edges = [];
+  for (let i = 0; i < weights.length; i++) {
+    for (let j = i + 1; j < weights.length; j++) {
+      if (adj[i][j] === 1 && weights[i][j] > 0) {
+        edges.push({ u: i, v: j, weight: weights[i][j] });
+      }
+    }
+  }
+  return edges;
+}
+
+function sortEdges(a, b) {
+  if (a.weight !== b.weight) {
+    return a.weight - b.weight;
+  }
+  if (a.u !== b.u) {
+    return a.u - b.u;
+  }
+  return a.v - b.v;
 }
 
 function renderMatrixTable(matrix, elementId, highlightLoops) {
@@ -117,7 +184,7 @@ function renderMatrixTable(matrix, elementId, highlightLoops) {
   for (let i = 0; i < matrix.length; i++) {
     html += "<tr>";
     for (let j = 0; j < matrix[i].length; j++) {
-      const isLoop = highlightLoops && i === j && matrix[i][j] === 1;
+      const isLoop = highlightLoops && i === j && matrix[i][j] > 0;
       const cssClass = isLoop ? "highlight" : "";
       html += `<td class="${cssClass}">${matrix[i][j]}</td>`;
     }
@@ -128,59 +195,44 @@ function renderMatrixTable(matrix, elementId, highlightLoops) {
   element.innerHTML = html;
 }
 
-function updateRunLabel(text) {
-  const label = document.getElementById("runLabel");
-  if (label) {
-    label.textContent = text;
-  }
-}
-
-function updateResults(state) {
-  setText("bfsOrder", formatList(state.bfsResult.order));
-  setText("bfsTree", formatEdgeList(state.bfsResult.tree));
-  setText("dfsOrder", formatList(state.dfsResult.order));
-  setText("dfsTree", formatEdgeList(state.dfsResult.tree));
-}
-
-function updateResultsFromStepper(state) {
-  if (!state.stepper) {
+function renderSortedEdges(edges) {
+  const element = document.getElementById("sortedEdges");
+  if (!element) {
     return;
   }
-
-  const order = [...state.stepper.order];
-  const tree = [...state.stepper.treeEdges];
-  if (state.mode === "bfs") {
-    state.bfsResult = { order, tree };
-  } else {
-    state.dfsResult = { order, tree };
+  if (!edges.length) {
+    element.textContent = "немає";
+    return;
   }
-  updateResults(state);
+  element.textContent = edges
+    .map((edge) => `${edge.u + 1}-${edge.v + 1} (w=${edge.weight})`)
+    .join("\n");
 }
 
-function renderProtocol(protocol, mode) {
-  const element = document.getElementById("protocol");
+function renderProtocol(protocol) {
+  const element = document.getElementById("kruskalProtocol");
   if (!element) {
     return;
   }
 
-  if (!protocol.length || !mode) {
+  if (!protocol.length) {
     element.innerHTML = "<p>немає</p>";
     return;
   }
 
-  const structureLabel = mode === "bfs" ? "Черга" : "Стек";
   let html = '<table class="protocol-table">';
   html +=
-    `<tr><th>Крок</th><th>Поточна</th><th>Додано</th><th>${structureLabel}</th><th>Порядок</th></tr>`;
+    "<tr><th>Крок</th><th>Ребро</th><th>Вага</th><th>Дія</th><th>Кістяк</th><th>Сума</th></tr>";
 
   protocol.forEach((entry) => {
     html += `
       <tr>
         <td>${entry.step}</td>
-        <td>${formatVertex(entry.current)}</td>
-        <td>${formatList(entry.added)}</td>
-        <td>${formatList(entry.structure)}</td>
-        <td>${formatList(entry.order)}</td>
+        <td>${formatEdge(entry.edge)}</td>
+        <td>${entry.edge.weight}</td>
+        <td>${entry.action}</td>
+        <td>${formatEdgeList(entry.mst)}</td>
+        <td>${entry.total}</td>
       </tr>
     `;
   });
@@ -189,174 +241,47 @@ function renderProtocol(protocol, mode) {
   element.innerHTML = html;
 }
 
-function createStepper(mode, matrix) {
-  return {
-    mode,
-    matrix,
-    size: matrix.length,
-    visited: new Array(matrix.length).fill(false),
-    queued: new Array(matrix.length).fill(false),
-    processed: new Array(matrix.length).fill(false),
-    current: null,
-    queue: [],
-    stack: [],
-    order: [],
-    treeEdges: [],
-    protocol: [],
-    stepCount: 0,
-    done: false,
-    step() {
-      if (this.done) {
-        return { done: true };
-      }
-      this.current = null;
-      if (this.mode === "bfs") {
-        return stepBfs(this);
-      }
-      return stepDfs(this);
-    },
-  };
+function updateRunLabel(text) {
+  const label = document.getElementById("runLabel");
+  if (label) {
+    label.textContent = text;
+  }
 }
 
-function stepBfs(state) {
-  let addedStart = null;
-
-  if (state.queue.length === 0) {
-    const nextStart = findNextStart(state);
-    if (nextStart === -1) {
-      state.done = true;
-      return { done: true };
-    }
-    enqueue(state, nextStart);
-    addedStart = nextStart;
+function updateCurrentEdge(edge, decision) {
+  const element = document.getElementById("currentEdge");
+  if (!element) {
+    return;
   }
 
-  const current = state.queue.shift();
-  state.current = current;
-  state.queued[current] = false;
-
-  const added = [];
-  if (addedStart !== null) {
-    added.push(addedStart);
+  if (!edge) {
+    element.textContent = "Поточне ребро: -";
+    return;
   }
 
-  for (let j = 0; j < state.size; j++) {
-    if (state.matrix[current][j] === 1 && !state.visited[j]) {
-      enqueue(state, j);
-      added.push(j);
-      state.treeEdges.push([current, j]);
-    }
-  }
-
-  state.processed[current] = true;
-  state.order.push(current);
-  state.stepCount += 1;
-
-  if (state.queue.length === 0 && findNextStart(state) === -1) {
-    state.done = true;
-  }
-
-  const info = buildStepInfo(state, current, added, [...state.queue]);
-  state.protocol.push(info);
-  return info;
+  const status = decision === "accepted"
+    ? "додано"
+    : decision === "rejected"
+      ? "відхилено"
+      : "";
+  const statusText = status ? `, статус: ${status}` : "";
+  element.textContent = `Поточне ребро: ${formatEdge(edge)} (w=${edge.weight})${statusText}`;
 }
 
-function stepDfs(state) {
-  let addedStart = null;
-
-  if (state.stack.length === 0) {
-    const nextStart = findNextStart(state);
-    if (nextStart === -1) {
-      state.done = true;
-      return { done: true };
-    }
-    pushStack(state, nextStart);
-    addedStart = nextStart;
-  }
-
-  const current = state.stack.pop();
-  state.current = current;
-  state.queued[current] = false;
-
-  const added = [];
-  if (addedStart !== null) {
-    added.push(addedStart);
-  }
-
-  const neighbors = [];
-  for (let j = 0; j < state.size; j++) {
-    if (state.matrix[current][j] === 1 && !state.visited[j]) {
-      neighbors.push(j);
-    }
-  }
-
-  for (let i = neighbors.length - 1; i >= 0; i--) {
-    const vertex = neighbors[i];
-    pushStack(state, vertex);
-    state.treeEdges.push([current, vertex]);
-  }
-
-  neighbors.forEach((vertex) => added.push(vertex));
-
-  state.processed[current] = true;
-  state.order.push(current);
-  state.stepCount += 1;
-
-  if (state.stack.length === 0 && findNextStart(state) === -1) {
-    state.done = true;
-  }
-
-  const info = buildStepInfo(state, current, added, [...state.stack]);
-  state.protocol.push(info);
-  return info;
+function updateMstResults(edges, total) {
+  setText("mstEdges", formatEdgeList(edges));
+  setText("mstWeight", total.toString());
 }
 
-function enqueue(state, vertex) {
-  state.queue.push(vertex);
-  state.visited[vertex] = true;
-  state.queued[vertex] = true;
-}
-
-function pushStack(state, vertex) {
-  state.stack.push(vertex);
-  state.visited[vertex] = true;
-  state.queued[vertex] = true;
-}
-
-function findNextStart(state) {
-  for (let i = 0; i < state.size; i++) {
-    if (!state.visited[i] && hasOutgoing(state.matrix, i)) {
-      return i;
-    }
+function setText(id, text) {
+  const element = document.getElementById(id);
+  if (element) {
+    element.textContent = text;
   }
-  return -1;
 }
 
-function hasOutgoing(matrix, index) {
-  for (let j = 0; j < matrix.length; j++) {
-    if (matrix[index][j] === 1) {
-      return true;
-    }
-  }
-  return false;
-}
-
-function buildStepInfo(state, current, added, structure) {
-  return {
-    done: false,
-    step: state.stepCount,
-    current,
-    added,
-    structure,
-    order: [...state.order],
-  };
-}
-
-function formatList(list) {
-  if (!list.length) {
-    return "немає";
-  }
-  return list.map((value) => value + 1).join(", ");
+function formatEdge(edge) {
+  return `${edge.u + 1}-${edge.v + 1}`;
 }
 
 function formatEdgeList(edges) {
@@ -364,21 +289,96 @@ function formatEdgeList(edges) {
     return "немає";
   }
   return edges
-    .map((edge) => `${edge[0] + 1}->${edge[1] + 1}`)
+    .map((edge) => `${edge.u + 1}-${edge.v + 1}(${edge.weight})`)
     .join(", ");
 }
 
-function formatVertex(value) {
-  if (value === null || value === undefined) {
-    return "-";
-  }
-  return value + 1;
+function createKruskalStepper(edges, size) {
+  return {
+    edges,
+    size,
+    index: 0,
+    stepCount: 0,
+    mstEdges: [],
+    totalWeight: 0,
+    protocol: [],
+    currentEdge: null,
+    lastDecision: null,
+    dsu: new DisjointSet(size),
+    done: false,
+    step() {
+      if (this.done) {
+        return { done: true };
+      }
+
+      if (this.mstEdges.length === this.size - 1 || this.index >= this.edges.length) {
+        this.done = true;
+        return { done: true };
+      }
+
+      const edge = this.edges[this.index];
+      this.index += 1;
+      this.currentEdge = edge;
+
+      const added = this.dsu.union(edge.u, edge.v);
+      this.lastDecision = added ? "accepted" : "rejected";
+
+      if (added) {
+        this.mstEdges.push(edge);
+        this.totalWeight += edge.weight;
+      }
+
+      this.stepCount += 1;
+      const info = {
+        done: false,
+        step: this.stepCount,
+        edge,
+        action: added ? "додано" : "відхилено (цикл)",
+        mst: [...this.mstEdges],
+        total: this.totalWeight,
+      };
+
+      this.protocol.push(info);
+
+      if (this.mstEdges.length === this.size - 1 || this.index >= this.edges.length) {
+        this.done = true;
+      }
+
+      return info;
+    },
+  };
 }
 
-function setText(id, text) {
-  const element = document.getElementById(id);
-  if (element) {
-    element.textContent = text;
+class DisjointSet {
+  constructor(size) {
+    this.parent = Array.from({ length: size }, (_, i) => i);
+    this.rank = new Array(size).fill(0);
+  }
+
+  find(value) {
+    if (this.parent[value] !== value) {
+      this.parent[value] = this.find(this.parent[value]);
+    }
+    return this.parent[value];
+  }
+
+  union(a, b) {
+    const rootA = this.find(a);
+    const rootB = this.find(b);
+    if (rootA === rootB) {
+      return false;
+    }
+
+    if (this.rank[rootA] < this.rank[rootB]) {
+      this.parent[rootA] = rootB;
+    } else if (this.rank[rootA] > this.rank[rootB]) {
+      this.parent[rootB] = rootA;
+    } else {
+      this.parent[rootB] = rootA;
+      this.rank[rootA] += 1;
+    }
+
+    return true;
   }
 }
 
@@ -399,97 +399,70 @@ function buildCircleWithCenter(count, centerX, centerY, radius) {
   return positions;
 }
 
-function drawGraph(matrix, positions, layout, state) {
+function drawGraph(adj, weights, positions, layout, state) {
   const canvas = document.getElementById("graph");
   const ctx = canvas.getContext("2d");
   const nodeRadius = 20;
   ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-  const treeSet = buildTreeEdgeSet(state);
-  const hasEdge = (i, j) => Number(matrix[i][j]) === 1;
+  const mstSet = buildMstEdgeSet(state);
+  const currentKey = state.stepper?.currentEdge
+    ? buildEdgeKey(state.stepper.currentEdge.u, state.stepper.currentEdge.v)
+    : null;
 
   for (let i = 0; i < positions.length; i++) {
-    if (hasEdge(i, i)) {
+    if (adj[i][i] === 1 && weights[i][i] > 0) {
       drawLoop(ctx, positions[i], layout, nodeRadius, "black");
+      drawLoopLabel(ctx, positions[i], layout, nodeRadius, weights[i][i]);
     }
   }
 
   for (let i = 0; i < positions.length; i++) {
     for (let j = i + 1; j < positions.length; j++) {
-      const ij = hasEdge(i, j);
-      const ji = hasEdge(j, i);
-
-      if (ij && ji) {
-        drawArrow(
-          ctx,
-          positions[i],
-          positions[j],
-          nodeRadius,
-          1,
-          treeSet.has(`${i}-${j}`) ? "#e67e22" : "black",
-        );
-        drawArrow(
-          ctx,
-          positions[j],
-          positions[i],
-          nodeRadius,
-          -1,
-          treeSet.has(`${j}-${i}`) ? "#e67e22" : "black",
-        );
-      } else if (ij) {
-        drawArrow(
-          ctx,
-          positions[i],
-          positions[j],
-          nodeRadius,
-          0,
-          treeSet.has(`${i}-${j}`) ? "#e67e22" : "black",
-        );
-      } else if (ji) {
-        drawArrow(
-          ctx,
-          positions[j],
-          positions[i],
-          nodeRadius,
-          0,
-          treeSet.has(`${j}-${i}`) ? "#e67e22" : "black",
-        );
+      if (adj[i][j] !== 1 || weights[i][j] === 0) {
+        continue;
       }
+
+      const key = buildEdgeKey(i, j);
+      let color = "black";
+      let width = 2;
+
+      if (currentKey === key && state.stepper) {
+        if (state.stepper.lastDecision === "rejected") {
+          color = "#d0021b";
+        } else {
+          color = "#4a90e2";
+        }
+        width = 3;
+      } else if (mstSet.has(key)) {
+        color = "#e67e22";
+        width = 3;
+      }
+
+      drawUndirectedEdge(ctx, positions[i], positions[j], nodeRadius, color, width);
+      drawEdgeLabel(ctx, positions[i], positions[j], weights[i][j]);
     }
   }
 
   for (let i = 0; i < positions.length; i++) {
-    const color = resolveNodeColor(state, i);
-    drawNode(ctx, positions[i], nodeRadius, i + 1, color);
+    drawNode(ctx, positions[i], nodeRadius, i + 1);
   }
 }
 
-function buildTreeEdgeSet(state) {
-  if (!state || !state.stepper) {
+function buildMstEdgeSet(state) {
+  if (!state.stepper) {
     return new Set();
   }
-  const edges = state.stepper.treeEdges || [];
-  return new Set(edges.map((edge) => `${edge[0]}-${edge[1]}`));
+  return new Set(
+    state.stepper.mstEdges.map((edge) => buildEdgeKey(edge.u, edge.v)),
+  );
 }
 
-function resolveNodeColor(state, index) {
-  if (!state || !state.stepper) {
-    return "#ffffff";
-  }
-  if (state.stepper.current === index) {
-    return "#4a90e2";
-  }
-  if (state.stepper.processed[index]) {
-    return "#7ed321";
-  }
-  if (state.stepper.queued[index]) {
-    return "#f5d547";
-  }
-  return "#ffffff";
+function buildEdgeKey(u, v) {
+  return u < v ? `${u}-${v}` : `${v}-${u}`;
 }
 
-function drawArrow(ctx, from, to, nodeRadius, curveDirection, color) {
-  const headLength = 12;
+function drawUndirectedEdge(ctx, from, to, nodeRadius, color, width) {
   const dx = to.x - from.x;
   const dy = to.y - from.y;
   const angle = Math.atan2(dy, dx);
@@ -500,40 +473,27 @@ function drawArrow(ctx, from, to, nodeRadius, curveDirection, color) {
   const endY = to.y - nodeRadius * Math.sin(angle);
 
   ctx.strokeStyle = color;
-  ctx.lineWidth = color === "#e67e22" ? 3 : 2;
+  ctx.lineWidth = width;
   ctx.beginPath();
+  ctx.moveTo(startX, startY);
+  ctx.lineTo(endX, endY);
+  ctx.stroke();
+}
 
-  let arrowAngle = angle;
+function drawEdgeLabel(ctx, from, to, weight) {
+  const midX = (from.x + to.x) / 2;
+  const midY = (from.y + to.y) / 2;
+  const dx = to.x - from.x;
+  const dy = to.y - from.y;
+  const length = Math.hypot(dx, dy) || 1;
+  const offsetX = (-dy / length) * 10;
+  const offsetY = (dx / length) * 10;
 
-  if (curveDirection !== 0) {
-    const curveOffset = 35 * curveDirection;
-    const controlX = (from.x + to.x) / 2 - curveOffset * Math.sin(angle);
-    const controlY = (from.y + to.y) / 2 + curveOffset * Math.cos(angle);
-
-    ctx.moveTo(startX, startY);
-    ctx.quadraticCurveTo(controlX, controlY, endX, endY);
-    ctx.stroke();
-
-    arrowAngle = Math.atan2(endY - controlY, endX - controlX);
-  } else {
-    ctx.moveTo(startX, startY);
-    ctx.lineTo(endX, endY);
-    ctx.stroke();
-  }
-
-  ctx.beginPath();
-  ctx.moveTo(endX, endY);
-  ctx.lineTo(
-    endX - headLength * Math.cos(arrowAngle - Math.PI / 6),
-    endY - headLength * Math.sin(arrowAngle - Math.PI / 6),
-  );
-  ctx.lineTo(
-    endX - headLength * Math.cos(arrowAngle + Math.PI / 6),
-    endY - headLength * Math.sin(arrowAngle + Math.PI / 6),
-  );
-  ctx.closePath();
-  ctx.fillStyle = color;
-  ctx.fill();
+  ctx.fillStyle = "#1f1f1f";
+  ctx.font = "12px Arial";
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.fillText(weight.toString(), midX + offsetX, midY + offsetY);
 }
 
 function drawLoop(ctx, position, layout, nodeRadius, color) {
@@ -556,30 +516,34 @@ function drawLoop(ctx, position, layout, nodeRadius, color) {
   ctx.beginPath();
   ctx.arc(loopCenterX, loopCenterY, loopRadius, 0, 2 * Math.PI);
   ctx.stroke();
-
-  const arrowAngle = angle + Math.PI / 3;
-  const arrowX = loopCenterX + loopRadius * Math.cos(arrowAngle);
-  const arrowY = loopCenterY + loopRadius * Math.sin(arrowAngle);
-
-  ctx.beginPath();
-  ctx.moveTo(arrowX, arrowY);
-  ctx.lineTo(
-    arrowX - 8 * Math.cos(arrowAngle - Math.PI / 6),
-    arrowY - 8 * Math.sin(arrowAngle - Math.PI / 6),
-  );
-  ctx.lineTo(
-    arrowX - 8 * Math.cos(arrowAngle + Math.PI / 6),
-    arrowY - 8 * Math.sin(arrowAngle + Math.PI / 6),
-  );
-  ctx.closePath();
-  ctx.fillStyle = color;
-  ctx.fill();
 }
 
-function drawNode(ctx, position, nodeRadius, label, fillColor) {
+function drawLoopLabel(ctx, position, layout, nodeRadius, weight) {
+  const loopRadius = 18;
+  let angle;
+
+  if (position.x === layout.centerX && position.y === layout.centerY) {
+    angle = -Math.PI / 2;
+  } else {
+    angle = Math.atan2(position.y - layout.centerY, position.x - layout.centerX);
+  }
+
+  const labelX =
+    position.x + (nodeRadius + loopRadius + 14) * Math.cos(angle);
+  const labelY =
+    position.y + (nodeRadius + loopRadius + 14) * Math.sin(angle);
+
+  ctx.fillStyle = "#1f1f1f";
+  ctx.font = "12px Arial";
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.fillText(weight.toString(), labelX, labelY);
+}
+
+function drawNode(ctx, position, nodeRadius, label) {
   ctx.beginPath();
   ctx.arc(position.x, position.y, nodeRadius, 0, 2 * Math.PI);
-  ctx.fillStyle = fillColor;
+  ctx.fillStyle = "white";
   ctx.fill();
   ctx.strokeStyle = "black";
   ctx.lineWidth = 2;
