@@ -1,6 +1,5 @@
 import createRandomMatrix from "./matrix.js";
 import buildAdjacencyMatrix from "./dirMatrix.js";
-import buildSymmetricMatrix from "./unDirMatrix.js";
 
 try {
   const n1 = 5;
@@ -10,115 +9,96 @@ try {
 
   const variant = n1 * 1000 + n2 * 100 + n3 * 10 + n4;
   const vertexCount = 10 + n3;
-
-  const k1 = 1.0 - n3 * 0.01 - n4 * 0.01 - 0.3;
-  const k2 = 1.0 - n3 * 0.005 - n4 * 0.005 - 0.27;
+  const k = 1.0 - n3 * 0.01 - n4 * 0.005 - 0.15;
 
   const layout = {
     centerX: 450,
     centerY: 300,
     radius: 230,
-    condRadius: 180,
   };
 
   const baseMatrix = createRandomMatrix(vertexCount, variant);
-  const dirK1 = buildAdjacencyMatrix(baseMatrix, k1);
-  const undirK1 = buildSymmetricMatrix(dirK1);
-  const dirK2 = buildAdjacencyMatrix(baseMatrix, k2);
-
-  const mainPositions = buildCircleWithCenter(
+  const adjacencyMatrix = buildAdjacencyMatrix(baseMatrix, k);
+  const positions = buildCircleWithCenter(
     vertexCount,
     layout.centerX,
     layout.centerY,
     layout.radius,
   );
 
-  const k1DirectedStats = getDirectedStats(dirK1);
-  const k1UndirectedStats = getUndirectedStats(undirK1);
-  const k2DirectedStats = getDirectedStats(dirK2);
-
-  const matrixA2 = multiplyMatrices(dirK2, dirK2);
-  const matrixA3 = multiplyMatrices(matrixA2, dirK2);
-  const pathsLen2 = collectPathsLen2(dirK2, matrixA2);
-  const pathsLen3 = collectPathsLen3(dirK2, matrixA3);
-
-  const reachMatrix = buildReachability(dirK2);
-  const strongMatrix = buildStrongMatrix(reachMatrix);
-  const components = extractStrongComponents(strongMatrix);
-  const condensationMatrix = buildCondensationMatrix(dirK2, components);
-  const condPositions = buildCirclePositions(
-    components.length,
-    layout.centerX,
-    layout.centerY,
-    layout.condRadius,
-  );
-
-  renderMatrixTable(baseMatrix, "baseMatrix", false);
-  renderMatrixTable(dirK1, "dirMatrixK1", true);
-  renderMatrixTable(undirK1, "undirMatrixK1", true);
-  renderMatrixTable(dirK2, "dirMatrixK2", true);
-  renderMatrixTable(reachMatrix, "reachMatrix", true);
-  renderMatrixTable(strongMatrix, "strongMatrix", true);
-  renderMatrixTable(condensationMatrix, "condMatrix", true);
-
-  renderK1Stats(k1DirectedStats, k1UndirectedStats);
-  renderK2Stats(k2DirectedStats);
-  renderPaths(pathsLen2, "pathsLen2");
-  renderPaths(pathsLen3, "pathsLen3");
-  renderComponents(components);
-
-  const views = {
-    k1Dir: {
-      title: `Орієнтований граф k1 (k1 = ${k1.toFixed(2)})`,
-      matrix: dirK1,
-      positions: mainPositions,
-      directed: true,
-      labels: buildLabels(vertexCount),
-    },
-    k1Undir: {
-      title: `Неорієнтований граф k1 (k1 = ${k1.toFixed(2)})`,
-      matrix: undirK1,
-      positions: mainPositions,
-      directed: false,
-      labels: buildLabels(vertexCount),
-    },
-    k2Dir: {
-      title: `Новий орграф k2 (k2 = ${k2.toFixed(3)})`,
-      matrix: dirK2,
-      positions: mainPositions,
-      directed: true,
-      labels: buildLabels(vertexCount),
-    },
-    condensation: {
-      title: "Граф конденсації",
-      matrix: condensationMatrix,
-      positions: condPositions,
-      directed: true,
-      labels: buildLabels(components.length),
-    },
+  const state = {
+    mode: null,
+    stepper: null,
+    bfsResult: { order: [], tree: [] },
+    dfsResult: { order: [], tree: [] },
   };
 
-  const showDirK1Button = document.getElementById("showDirK1");
-  const showUndirK1Button = document.getElementById("showUndirK1");
-  const showDirK2Button = document.getElementById("showDirK2");
-  const showCondButton = document.getElementById("showCond");
+  renderMatrixTable(adjacencyMatrix, "adjMatrix", true);
+  updateRunLabel("Готово до запуску");
+  updateResults(state);
+  renderProtocol([], null);
+  drawGraph(adjacencyMatrix, positions, layout, state);
 
-  showDirK1Button.addEventListener("click", () => setGraphView("k1Dir"));
-  showUndirK1Button.addEventListener("click", () => setGraphView("k1Undir"));
-  showDirK2Button.addEventListener("click", () => setGraphView("k2Dir"));
-  showCondButton.addEventListener("click", () => {
-    setGraphView("condensation");
-  });
+  const startBfsButton = document.getElementById("startBfs");
+  const startDfsButton = document.getElementById("startDfs");
+  const nextStepButton = document.getElementById("nextStep");
+  const resetButton = document.getElementById("resetRun");
 
-  setGraphView("k1Dir");
+  startBfsButton.addEventListener("click", () => startTraversal("bfs"));
+  startDfsButton.addEventListener("click", () => startTraversal("dfs"));
+  nextStepButton.addEventListener("click", () => advanceStep());
+  resetButton.addEventListener("click", () => resetAll());
 
-  function setGraphView(key) {
-    const view = views[key];
-    if (!view) {
+  function startTraversal(mode) {
+    state.mode = mode;
+    state.stepper = createStepper(mode, adjacencyMatrix);
+    renderProtocol([], mode);
+    updateRunLabel(mode === "bfs" ? "BFS: старт" : "DFS: старт");
+    if (mode === "bfs") {
+      state.bfsResult = { order: [], tree: [] };
+    } else {
+      state.dfsResult = { order: [], tree: [] };
+    }
+    updateResults(state);
+    drawGraph(adjacencyMatrix, positions, layout, state);
+  }
+
+  function advanceStep() {
+    if (!state.stepper) {
+      alert("Спочатку натисніть Почати BFS або Почати DFS.");
       return;
     }
-    drawGraph(view.matrix, view.positions, view.directed, layout, view.labels);
-    updateGraphLabel(view.title);
+
+    const info = state.stepper.step();
+    if (!info.done) {
+      renderProtocol(state.stepper.protocol, state.mode);
+    }
+
+    if (state.stepper.done) {
+      updateRunLabel(
+        state.mode === "bfs" ? "BFS завершено" : "DFS завершено",
+      );
+    } else {
+      updateRunLabel(
+        state.mode === "bfs"
+          ? `BFS: крок ${state.stepper.stepCount}`
+          : `DFS: крок ${state.stepper.stepCount}`,
+      );
+    }
+
+    updateResultsFromStepper(state);
+    drawGraph(adjacencyMatrix, positions, layout, state);
+  }
+
+  function resetAll() {
+    state.mode = null;
+    state.stepper = null;
+    state.bfsResult = { order: [], tree: [] };
+    state.dfsResult = { order: [], tree: [] };
+    updateResults(state);
+    renderProtocol([], null);
+    updateRunLabel("Готово до запуску");
+    drawGraph(adjacencyMatrix, positions, layout, state);
   }
 } catch (error) {
   console.error("Помилка при завантаженні:", error);
@@ -139,11 +119,7 @@ function renderMatrixTable(matrix, elementId, highlightLoops) {
     for (let j = 0; j < matrix[i].length; j++) {
       const isLoop = highlightLoops && i === j && matrix[i][j] === 1;
       const cssClass = isLoop ? "highlight" : "";
-
-      const value = matrix[i][j];
-      const displayValue = Number.isInteger(value) ? value : value.toFixed(2);
-
-      html += `<td class="${cssClass}">${displayValue}</td>`;
+      html += `<td class="${cssClass}">${matrix[i][j]}</td>`;
     }
     html += "</tr>";
   }
@@ -152,344 +128,258 @@ function renderMatrixTable(matrix, elementId, highlightLoops) {
   element.innerHTML = html;
 }
 
-function renderK1Stats(directedStats, undirectedStats) {
-  const element = document.getElementById("k1Stats");
+function updateRunLabel(text) {
+  const label = document.getElementById("runLabel");
+  if (label) {
+    label.textContent = text;
+  }
+}
+
+function updateResults(state) {
+  setText("bfsOrder", formatList(state.bfsResult.order));
+  setText("bfsTree", formatEdgeList(state.bfsResult.tree));
+  setText("dfsOrder", formatList(state.dfsResult.order));
+  setText("dfsTree", formatEdgeList(state.dfsResult.tree));
+}
+
+function updateResultsFromStepper(state) {
+  if (!state.stepper) {
+    return;
+  }
+
+  const order = [...state.stepper.order];
+  const tree = [...state.stepper.treeEdges];
+  if (state.mode === "bfs") {
+    state.bfsResult = { order, tree };
+  } else {
+    state.dfsResult = { order, tree };
+  }
+  updateResults(state);
+}
+
+function renderProtocol(protocol, mode) {
+  const element = document.getElementById("protocol");
   if (!element) {
     return;
   }
 
-  const directedTable = buildDirectedStatsTable(directedStats);
-  const undirectedTable = buildUndirectedStatsTable(undirectedStats);
-  const pendant = formatVertexList(undirectedStats.pendant);
-  const isolated = formatVertexList(undirectedStats.isolated);
-
-  element.innerHTML = `
-    <div class="stats-group">
-      <h4>Орієнтований граф k1: півстепені та степені</h4>
-      ${directedTable}
-      <p>${formatRegularity(directedStats.regular)}</p>
-    </div>
-    <div class="stats-group">
-      <h4>Неорієнтований граф k1: степені</h4>
-      ${undirectedTable}
-      <p>${formatRegularity(undirectedStats.regular)}</p>
-      <p>Висячі вершини: ${pendant}</p>
-      <p>Ізольовані вершини: ${isolated}</p>
-    </div>
-  `;
-}
-
-function renderK2Stats(directedStats) {
-  const element = document.getElementById("k2Stats");
-  if (!element) {
+  if (!protocol.length || !mode) {
+    element.innerHTML = "<p>немає</p>";
     return;
   }
 
-  element.innerHTML = `
-    <div class="stats-group">
-      <h4>Новий орграф k2: півстепені та степені</h4>
-      ${buildDirectedStatsTable(directedStats)}
-      <p>${formatRegularity(directedStats.regular)}</p>
-    </div>
-  `;
-}
+  const structureLabel = mode === "bfs" ? "Черга" : "Стек";
+  let html = '<table class="protocol-table">';
+  html +=
+    `<tr><th>Крок</th><th>Поточна</th><th>Додано</th><th>${structureLabel}</th><th>Порядок</th></tr>`;
 
-function renderPaths(paths, elementId) {
-  const element = document.getElementById(elementId);
-  if (!element) {
-    return;
-  }
-  element.textContent = paths.length > 0 ? paths.join("\n") : "немає";
-}
-
-function renderComponents(components) {
-  const element = document.getElementById("sccList");
-  if (!element) {
-    return;
-  }
-
-  const items = components
-    .map(
-      (component, index) =>
-        `<li>К${index + 1}: ${component.map((v) => v + 1).join(", ")}</li>`,
-    )
-    .join("");
-
-  element.innerHTML = `
-    <div class="stats-group">
-      <h4>Компоненти сильної зв'язності</h4>
-      <ol class="components-list">${items}</ol>
-    </div>
-  `;
-}
-
-function buildDirectedStatsTable(stats) {
-  let html = '<table class="stats-table">';
-  html += "<tr><th>Вершина</th><th>Вихід</th><th>Заход</th><th>Ступінь</th></tr>";
-
-  for (let i = 0; i < stats.out.length; i++) {
+  protocol.forEach((entry) => {
     html += `
       <tr>
-        <td>${i + 1}</td>
-        <td>${stats.out[i]}</td>
-        <td>${stats.incoming[i]}</td>
-        <td>${stats.total[i]}</td>
+        <td>${entry.step}</td>
+        <td>${formatVertex(entry.current)}</td>
+        <td>${formatList(entry.added)}</td>
+        <td>${formatList(entry.structure)}</td>
+        <td>${formatList(entry.order)}</td>
       </tr>
     `;
-  }
+  });
 
   html += "</table>";
-  return html;
+  element.innerHTML = html;
 }
 
-function buildUndirectedStatsTable(stats) {
-  let html = '<table class="stats-table">';
-  html += "<tr><th>Вершина</th><th>Ступінь</th></tr>";
+function createStepper(mode, matrix) {
+  return {
+    mode,
+    matrix,
+    size: matrix.length,
+    visited: new Array(matrix.length).fill(false),
+    queued: new Array(matrix.length).fill(false),
+    processed: new Array(matrix.length).fill(false),
+    current: null,
+    queue: [],
+    stack: [],
+    order: [],
+    treeEdges: [],
+    protocol: [],
+    stepCount: 0,
+    done: false,
+    step() {
+      if (this.done) {
+        return { done: true };
+      }
+      this.current = null;
+      if (this.mode === "bfs") {
+        return stepBfs(this);
+      }
+      return stepDfs(this);
+    },
+  };
+}
 
-  for (let i = 0; i < stats.degree.length; i++) {
-    html += `
-      <tr>
-        <td>${i + 1}</td>
-        <td>${stats.degree[i]}</td>
-      </tr>
-    `;
+function stepBfs(state) {
+  let addedStart = null;
+
+  if (state.queue.length === 0) {
+    const nextStart = findNextStart(state);
+    if (nextStart === -1) {
+      state.done = true;
+      return { done: true };
+    }
+    enqueue(state, nextStart);
+    addedStart = nextStart;
   }
 
-  html += "</table>";
-  return html;
-}
+  const current = state.queue.shift();
+  state.current = current;
+  state.queued[current] = false;
 
-function formatRegularity(regularInfo) {
-  if (regularInfo.isRegular) {
-    return `Регулярний граф: так (ступінь ${regularInfo.degree})`;
+  const added = [];
+  if (addedStart !== null) {
+    added.push(addedStart);
   }
-  return "Регулярний граф: ні";
+
+  for (let j = 0; j < state.size; j++) {
+    if (state.matrix[current][j] === 1 && !state.visited[j]) {
+      enqueue(state, j);
+      added.push(j);
+      state.treeEdges.push([current, j]);
+    }
+  }
+
+  state.processed[current] = true;
+  state.order.push(current);
+  state.stepCount += 1;
+
+  if (state.queue.length === 0 && findNextStart(state) === -1) {
+    state.done = true;
+  }
+
+  const info = buildStepInfo(state, current, added, [...state.queue]);
+  state.protocol.push(info);
+  return info;
 }
 
-function formatVertexList(list) {
+function stepDfs(state) {
+  let addedStart = null;
+
+  if (state.stack.length === 0) {
+    const nextStart = findNextStart(state);
+    if (nextStart === -1) {
+      state.done = true;
+      return { done: true };
+    }
+    pushStack(state, nextStart);
+    addedStart = nextStart;
+  }
+
+  const current = state.stack.pop();
+  state.current = current;
+  state.queued[current] = false;
+
+  const added = [];
+  if (addedStart !== null) {
+    added.push(addedStart);
+  }
+
+  const neighbors = [];
+  for (let j = 0; j < state.size; j++) {
+    if (state.matrix[current][j] === 1 && !state.visited[j]) {
+      neighbors.push(j);
+    }
+  }
+
+  for (let i = neighbors.length - 1; i >= 0; i--) {
+    const vertex = neighbors[i];
+    pushStack(state, vertex);
+    state.treeEdges.push([current, vertex]);
+  }
+
+  neighbors.forEach((vertex) => added.push(vertex));
+
+  state.processed[current] = true;
+  state.order.push(current);
+  state.stepCount += 1;
+
+  if (state.stack.length === 0 && findNextStart(state) === -1) {
+    state.done = true;
+  }
+
+  const info = buildStepInfo(state, current, added, [...state.stack]);
+  state.protocol.push(info);
+  return info;
+}
+
+function enqueue(state, vertex) {
+  state.queue.push(vertex);
+  state.visited[vertex] = true;
+  state.queued[vertex] = true;
+}
+
+function pushStack(state, vertex) {
+  state.stack.push(vertex);
+  state.visited[vertex] = true;
+  state.queued[vertex] = true;
+}
+
+function findNextStart(state) {
+  for (let i = 0; i < state.size; i++) {
+    if (!state.visited[i] && hasOutgoing(state.matrix, i)) {
+      return i;
+    }
+  }
+  return -1;
+}
+
+function hasOutgoing(matrix, index) {
+  for (let j = 0; j < matrix.length; j++) {
+    if (matrix[index][j] === 1) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function buildStepInfo(state, current, added, structure) {
+  return {
+    done: false,
+    step: state.stepCount,
+    current,
+    added,
+    structure,
+    order: [...state.order],
+  };
+}
+
+function formatList(list) {
   if (!list.length) {
     return "немає";
   }
   return list.map((value) => value + 1).join(", ");
 }
 
-function getDirectedStats(matrix) {
-  const size = matrix.length;
-  const outgoing = new Array(size).fill(0);
-  const incoming = new Array(size).fill(0);
-
-  for (let i = 0; i < size; i++) {
-    for (let j = 0; j < size; j++) {
-      if (matrix[i][j] === 1) {
-        outgoing[i] += 1;
-        incoming[j] += 1;
-      }
-    }
+function formatEdgeList(edges) {
+  if (!edges.length) {
+    return "немає";
   }
-
-  const total = outgoing.map((value, index) => value + incoming[index]);
-  return {
-    out: outgoing,
-    incoming,
-    total,
-    regular: buildRegularInfo(total),
-  };
+  return edges
+    .map((edge) => `${edge[0] + 1}->${edge[1] + 1}`)
+    .join(", ");
 }
 
-function getUndirectedStats(matrix) {
-  const size = matrix.length;
-  const degree = new Array(size).fill(0);
-
-  for (let i = 0; i < size; i++) {
-    let sum = 0;
-    for (let j = 0; j < size; j++) {
-      sum += matrix[i][j];
-    }
-    if (matrix[i][i] === 1) {
-      sum += 1;
-    }
-    degree[i] = sum;
+function formatVertex(value) {
+  if (value === null || value === undefined) {
+    return "-";
   }
-
-  const pendant = [];
-  const isolated = [];
-
-  degree.forEach((value, index) => {
-    if (value === 1) {
-      pendant.push(index);
-    } else if (value === 0) {
-      isolated.push(index);
-    }
-  });
-
-  return {
-    degree,
-    pendant,
-    isolated,
-    regular: buildRegularInfo(degree),
-  };
+  return value + 1;
 }
 
-function buildRegularInfo(degreeList) {
-  if (!degreeList.length) {
-    return { isRegular: false, degree: 0 };
+function setText(id, text) {
+  const element = document.getElementById(id);
+  if (element) {
+    element.textContent = text;
   }
-  const base = degreeList[0];
-  const isRegular = degreeList.every((value) => value === base);
-  return { isRegular, degree: base };
-}
-
-function multiplyMatrices(a, b) {
-  const size = a.length;
-  const result = Array.from({ length: size }, () =>
-    new Array(size).fill(0),
-  );
-
-  for (let i = 0; i < size; i++) {
-    for (let k = 0; k < size; k++) {
-      if (a[i][k] === 0) {
-        continue;
-      }
-      for (let j = 0; j < size; j++) {
-        result[i][j] += a[i][k] * b[k][j];
-      }
-    }
-  }
-
-  return result;
-}
-
-function collectPathsLen2(matrix, a2) {
-  const size = matrix.length;
-  const paths = [];
-
-  for (let i = 0; i < size; i++) {
-    for (let j = 0; j < size; j++) {
-      if (a2[i][j] === 0) {
-        continue;
-      }
-      for (let k = 0; k < size; k++) {
-        if (matrix[i][k] === 1 && matrix[k][j] === 1) {
-          paths.push(`${i + 1} - ${k + 1} - ${j + 1}`);
-        }
-      }
-    }
-  }
-
-  return paths;
-}
-
-function collectPathsLen3(matrix, a3) {
-  const size = matrix.length;
-  const paths = [];
-
-  for (let i = 0; i < size; i++) {
-    for (let j = 0; j < size; j++) {
-      if (a3[i][j] === 0) {
-        continue;
-      }
-      for (let k = 0; k < size; k++) {
-        if (matrix[i][k] !== 1) {
-          continue;
-        }
-        for (let l = 0; l < size; l++) {
-          if (matrix[k][l] === 1 && matrix[l][j] === 1) {
-            paths.push(`${i + 1} - ${k + 1} - ${l + 1} - ${j + 1}`);
-          }
-        }
-      }
-    }
-  }
-
-  return paths;
-}
-
-function buildReachability(matrix) {
-  const size = matrix.length;
-  const reach = matrix.map((row, i) =>
-    row.map((value, j) => (i === j || value === 1 ? 1 : 0)),
-  );
-
-  for (let k = 0; k < size; k++) {
-    for (let i = 0; i < size; i++) {
-      if (reach[i][k] === 0) {
-        continue;
-      }
-      for (let j = 0; j < size; j++) {
-        if (reach[k][j] === 1) {
-          reach[i][j] = 1;
-        }
-      }
-    }
-  }
-
-  return reach;
-}
-
-function buildStrongMatrix(reach) {
-  const size = reach.length;
-  const strong = Array.from({ length: size }, () =>
-    new Array(size).fill(0),
-  );
-
-  for (let i = 0; i < size; i++) {
-    for (let j = 0; j < size; j++) {
-      strong[i][j] = reach[i][j] === 1 && reach[j][i] === 1 ? 1 : 0;
-    }
-  }
-
-  return strong;
-}
-
-function extractStrongComponents(strongMatrix) {
-  const size = strongMatrix.length;
-  const visited = new Array(size).fill(false);
-  const components = [];
-
-  for (let i = 0; i < size; i++) {
-    if (visited[i]) {
-      continue;
-    }
-    const component = [];
-    for (let j = 0; j < size; j++) {
-      if (strongMatrix[i][j] === 1) {
-        visited[j] = true;
-        component.push(j);
-      }
-    }
-    components.push(component);
-  }
-
-  return components;
-}
-
-function buildCondensationMatrix(matrix, components) {
-  const size = matrix.length;
-  const compIndex = new Array(size).fill(-1);
-  components.forEach((component, index) => {
-    component.forEach((vertex) => {
-      compIndex[vertex] = index;
-    });
-  });
-
-  const condSize = components.length;
-  const condensation = Array.from({ length: condSize }, () =>
-    new Array(condSize).fill(0),
-  );
-
-  for (let i = 0; i < size; i++) {
-    for (let j = 0; j < size; j++) {
-      if (matrix[i][j] === 1) {
-        const from = compIndex[i];
-        const to = compIndex[j];
-        if (from !== to) {
-          condensation[from][to] = 1;
-        }
-      }
-    }
-  }
-
-  return condensation;
 }
 
 function buildCircleWithCenter(count, centerX, centerY, radius) {
@@ -509,83 +399,96 @@ function buildCircleWithCenter(count, centerX, centerY, radius) {
   return positions;
 }
 
-function buildCirclePositions(count, centerX, centerY, radius) {
-  if (count <= 1) {
-    return [{ x: centerX, y: centerY }];
-  }
-
-  const positions = [];
-  const step = (Math.PI * 2) / count;
-  const startAngle = -Math.PI / 2;
-
-  for (let i = 0; i < count; i++) {
-    const angle = startAngle + step * i;
-    const x = centerX + radius * Math.cos(angle);
-    const y = centerY + radius * Math.sin(angle);
-    positions.push({ x: Math.round(x), y: Math.round(y) });
-  }
-
-  return positions;
-}
-
-function buildLabels(count) {
-  return Array.from({ length: count }, (_, index) => index + 1);
-}
-
-function updateGraphLabel(text) {
-  const label = document.getElementById("graphLabel");
-  if (label) {
-    label.textContent = text;
-  }
-}
-
-function drawGraph(matrix, positions, directed, layout, labels) {
+function drawGraph(matrix, positions, layout, state) {
   const canvas = document.getElementById("graph");
   const ctx = canvas.getContext("2d");
   const nodeRadius = 20;
   ctx.clearRect(0, 0, canvas.width, canvas.height);
 
+  const treeSet = buildTreeEdgeSet(state);
   const hasEdge = (i, j) => Number(matrix[i][j]) === 1;
 
   for (let i = 0; i < positions.length; i++) {
     if (hasEdge(i, i)) {
-      drawLoop(ctx, positions[i], directed, layout, nodeRadius);
+      drawLoop(ctx, positions[i], layout, nodeRadius, "black");
     }
   }
 
-  if (directed) {
-    for (let i = 0; i < positions.length; i++) {
-      for (let j = i + 1; j < positions.length; j++) {
-        const ij = hasEdge(i, j);
-        const ji = hasEdge(j, i);
+  for (let i = 0; i < positions.length; i++) {
+    for (let j = i + 1; j < positions.length; j++) {
+      const ij = hasEdge(i, j);
+      const ji = hasEdge(j, i);
 
-        if (ij && ji) {
-          drawArrow(ctx, positions[i], positions[j], nodeRadius, 1);
-          drawArrow(ctx, positions[j], positions[i], nodeRadius, -1);
-        } else if (ij) {
-          drawArrow(ctx, positions[i], positions[j], nodeRadius, 0);
-        } else if (ji) {
-          drawArrow(ctx, positions[j], positions[i], nodeRadius, 0);
-        }
-      }
-    }
-  } else {
-    for (let i = 0; i < positions.length; i++) {
-      for (let j = i + 1; j < positions.length; j++) {
-        if (hasEdge(i, j)) {
-          drawUndirectedEdge(ctx, positions[i], positions[j], nodeRadius);
-        }
+      if (ij && ji) {
+        drawArrow(
+          ctx,
+          positions[i],
+          positions[j],
+          nodeRadius,
+          1,
+          treeSet.has(`${i}-${j}`) ? "#e67e22" : "black",
+        );
+        drawArrow(
+          ctx,
+          positions[j],
+          positions[i],
+          nodeRadius,
+          -1,
+          treeSet.has(`${j}-${i}`) ? "#e67e22" : "black",
+        );
+      } else if (ij) {
+        drawArrow(
+          ctx,
+          positions[i],
+          positions[j],
+          nodeRadius,
+          0,
+          treeSet.has(`${i}-${j}`) ? "#e67e22" : "black",
+        );
+      } else if (ji) {
+        drawArrow(
+          ctx,
+          positions[j],
+          positions[i],
+          nodeRadius,
+          0,
+          treeSet.has(`${j}-${i}`) ? "#e67e22" : "black",
+        );
       }
     }
   }
 
   for (let i = 0; i < positions.length; i++) {
-    const label = labels && labels[i] ? labels[i] : i + 1;
-    drawNode(ctx, positions[i], nodeRadius, label);
+    const color = resolveNodeColor(state, i);
+    drawNode(ctx, positions[i], nodeRadius, i + 1, color);
   }
 }
 
-function drawArrow(ctx, from, to, nodeRadius, curveDirection) {
+function buildTreeEdgeSet(state) {
+  if (!state || !state.stepper) {
+    return new Set();
+  }
+  const edges = state.stepper.treeEdges || [];
+  return new Set(edges.map((edge) => `${edge[0]}-${edge[1]}`));
+}
+
+function resolveNodeColor(state, index) {
+  if (!state || !state.stepper) {
+    return "#ffffff";
+  }
+  if (state.stepper.current === index) {
+    return "#4a90e2";
+  }
+  if (state.stepper.processed[index]) {
+    return "#7ed321";
+  }
+  if (state.stepper.queued[index]) {
+    return "#f5d547";
+  }
+  return "#ffffff";
+}
+
+function drawArrow(ctx, from, to, nodeRadius, curveDirection, color) {
   const headLength = 12;
   const dx = to.x - from.x;
   const dy = to.y - from.y;
@@ -596,8 +499,8 @@ function drawArrow(ctx, from, to, nodeRadius, curveDirection) {
   const endX = to.x - nodeRadius * Math.cos(angle);
   const endY = to.y - nodeRadius * Math.sin(angle);
 
-  ctx.strokeStyle = "black";
-  ctx.lineWidth = 2;
+  ctx.strokeStyle = color;
+  ctx.lineWidth = color === "#e67e22" ? 3 : 2;
   ctx.beginPath();
 
   let arrowAngle = angle;
@@ -629,29 +532,11 @@ function drawArrow(ctx, from, to, nodeRadius, curveDirection) {
     endY - headLength * Math.sin(arrowAngle + Math.PI / 6),
   );
   ctx.closePath();
-  ctx.fillStyle = "black";
+  ctx.fillStyle = color;
   ctx.fill();
 }
 
-function drawUndirectedEdge(ctx, from, to, nodeRadius) {
-  const dx = to.x - from.x;
-  const dy = to.y - from.y;
-  const angle = Math.atan2(dy, dx);
-
-  const startX = from.x + nodeRadius * Math.cos(angle);
-  const startY = from.y + nodeRadius * Math.sin(angle);
-  const endX = to.x - nodeRadius * Math.cos(angle);
-  const endY = to.y - nodeRadius * Math.sin(angle);
-
-  ctx.strokeStyle = "black";
-  ctx.lineWidth = 2;
-  ctx.beginPath();
-  ctx.moveTo(startX, startY);
-  ctx.lineTo(endX, endY);
-  ctx.stroke();
-}
-
-function drawLoop(ctx, position, directed, layout, nodeRadius) {
+function drawLoop(ctx, position, layout, nodeRadius, color) {
   const loopRadius = 18;
   let angle;
 
@@ -666,37 +551,35 @@ function drawLoop(ctx, position, directed, layout, nodeRadius) {
   const loopCenterY =
     position.y + (nodeRadius + loopRadius) * Math.sin(angle);
 
-  ctx.strokeStyle = "black";
+  ctx.strokeStyle = color;
   ctx.lineWidth = 2;
   ctx.beginPath();
   ctx.arc(loopCenterX, loopCenterY, loopRadius, 0, 2 * Math.PI);
   ctx.stroke();
 
-  if (directed) {
-    const arrowAngle = angle + Math.PI / 3;
-    const arrowX = loopCenterX + loopRadius * Math.cos(arrowAngle);
-    const arrowY = loopCenterY + loopRadius * Math.sin(arrowAngle);
+  const arrowAngle = angle + Math.PI / 3;
+  const arrowX = loopCenterX + loopRadius * Math.cos(arrowAngle);
+  const arrowY = loopCenterY + loopRadius * Math.sin(arrowAngle);
 
-    ctx.beginPath();
-    ctx.moveTo(arrowX, arrowY);
-    ctx.lineTo(
-      arrowX - 8 * Math.cos(arrowAngle - Math.PI / 6),
-      arrowY - 8 * Math.sin(arrowAngle - Math.PI / 6),
-    );
-    ctx.lineTo(
-      arrowX - 8 * Math.cos(arrowAngle + Math.PI / 6),
-      arrowY - 8 * Math.sin(arrowAngle + Math.PI / 6),
-    );
-    ctx.closePath();
-    ctx.fillStyle = "black";
-    ctx.fill();
-  }
+  ctx.beginPath();
+  ctx.moveTo(arrowX, arrowY);
+  ctx.lineTo(
+    arrowX - 8 * Math.cos(arrowAngle - Math.PI / 6),
+    arrowY - 8 * Math.sin(arrowAngle - Math.PI / 6),
+  );
+  ctx.lineTo(
+    arrowX - 8 * Math.cos(arrowAngle + Math.PI / 6),
+    arrowY - 8 * Math.sin(arrowAngle + Math.PI / 6),
+  );
+  ctx.closePath();
+  ctx.fillStyle = color;
+  ctx.fill();
 }
 
-function drawNode(ctx, position, nodeRadius, label) {
+function drawNode(ctx, position, nodeRadius, label, fillColor) {
   ctx.beginPath();
   ctx.arc(position.x, position.y, nodeRadius, 0, 2 * Math.PI);
-  ctx.fillStyle = "white";
+  ctx.fillStyle = fillColor;
   ctx.fill();
   ctx.strokeStyle = "black";
   ctx.lineWidth = 2;

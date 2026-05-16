@@ -4,88 +4,57 @@
 <head>
   <meta charset="UTF-8">
   <script src="./node_modules/seedrandom/seedrandom.min.js"></script>
-  <title>Характеристики та зв'язність графа - Лабораторна 4</title>
+  <title>Обхід графа - Лабораторна 5</title>
   <link rel="stylesheet" href="style.css">
 
 </head>
 
 <body>
 
-  <h1>Лабораторна робота №4 Характеристики та зв'язність графа</h1>
+  <h1>Лабораторна робота №5. Обхід графа</h1>
 
   <div class="controls">
-    <button id="showDirK1">Орієнтований граф k1</button>
-    <button id="showUndirK1">Неорієнтований граф k1</button>
-    <button id="showDirK2">Новий орграф k2</button>
-    <button id="showCond">Граф конденсації</button>
+    <button id="startBfs">Почати BFS</button>
+    <button id="nextStep">Наступний крок</button>
+    <button id="startDfs">Почати DFS</button>
+    <button id="resetRun">Скинути</button>
   </div>
 
   <div class="container">
     <div class="graph-section">
-      <h2>Візуалізація графа</h2>
-      <div id="graphLabel" class="graph-label"></div>
+      <h2>Граф</h2>
+      <div id="runLabel" class="run-label"></div>
+      <div class="legend">
+        <span><i class="legend-color white"></i>не відвідана</span>
+        <span><i class="legend-color yellow"></i>в черзі/стеку</span>
+        <span><i class="legend-color green"></i>оброблена</span>
+        <span><i class="legend-color blue"></i>поточна</span>
+        <span><i class="legend-color orange"></i>ребра дерева</span>
+      </div>
       <canvas id="graph" width="900" height="600"></canvas>
+    </div>
+
+    <div class="matrix-section">
+      <h2>Матриця суміжності</h2>
+      <div id="adjMatrix"></div>
+    </div>
+
+    <div class="protocol-section">
+      <h2>Протокол обходу</h2>
+      <div id="protocol"></div>
     </div>
 
     <div class="results-section">
       <h2>Результати</h2>
-
       <div class="result-block">
-        <h3>Частина 1 (k1 = 0.63)</h3>
-        <div class="matrix-grid">
-          <div class="matrix-display">
-            <h4>Базова матриця</h4>
-            <div id="baseMatrix"></div>
-          </div>
-
-          <div class="matrix-display">
-            <h4>Матриця орієнтованого графа k1</h4>
-            <div id="dirMatrixK1"></div>
-          </div>
-
-          <div class="matrix-display">
-            <h4>Матриця неорієнтованого графа k1</h4>
-            <div id="undirMatrixK1"></div>
-          </div>
-        </div>
-
-        <div id="k1Stats" class="stats-block"></div>
+        <h3>BFS</h3>
+        <p>Порядок: <span id="bfsOrder"></span></p>
+        <p>Дерево обходу: <span id="bfsTree"></span></p>
       </div>
-
       <div class="result-block">
-        <h3>Частина 2 (k2 = 0.695)</h3>
-        <div class="matrix-grid">
-          <div class="matrix-display">
-            <h4>Матриця нового орграфа k2</h4>
-            <div id="dirMatrixK2"></div>
-          </div>
-
-          <div class="matrix-display">
-            <h4>Матриця досяжності</h4>
-            <div id="reachMatrix"></div>
-          </div>
-
-          <div class="matrix-display">
-            <h4>Матриця сильної зв'язності</h4>
-            <div id="strongMatrix"></div>
-          </div>
-
-          <div class="matrix-display">
-            <h4>Матриця графа конденсації</h4>
-            <div id="condMatrix"></div>
-          </div>
-        </div>
-
-        <div id="k2Stats" class="stats-block"></div>
-
-        <div class="paths-block">
-          <h4>Шляхи довжини 2</h4>
-          <pre id="pathsLen2" class="path-list"></pre>
-          <h4>Шляхи довжини 3</h4>
-          <pre id="pathsLen3" class="path-list"></pre>
-        </div>
-
-        <div id="sccList" class="stats-block"></div>
+        <h3>DFS</h3>
+        <p>Порядок: <span id="dfsOrder"></span></p>
+        <p>Дерево обходу: <span id="dfsTree"></span></p>
       </div>
     </div>
   </div>
