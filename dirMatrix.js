@@ -1,7 +1,7 @@
-function buildDirectedMatrix(baseMatrix, coefficient) {
+function buildAdjacencyMatrix(baseMatrix, coefficient) {
   return baseMatrix.map((row) =>
     row.map((value) => (value * coefficient >= 1 ? 1 : 0)),
   );
 }
 
-export default buildDirectedMatrix;
+export default buildAdjacencyMatrix;

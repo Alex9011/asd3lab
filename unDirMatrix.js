@@ -1,4 +1,4 @@
-function buildUndirectedMatrix(directedMatrix) {
+function buildSymmetricMatrix(directedMatrix) {
   const size = directedMatrix.length;
   const undirectedMatrix = directedMatrix.map((row) => [...row]);
 
@@ -14,4 +14,4 @@ function buildUndirectedMatrix(directedMatrix) {
   return undirectedMatrix;
 }
 
-export default buildUndirectedMatrix;
+export default buildSymmetricMatrix;

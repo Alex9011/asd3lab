@@ -1,4 +1,4 @@
-function generateBaseMatrix(size, seed) {
+function createRandomMatrix(size, seed) {
   const seedFactory = Math.seedrandom;
   const rng = seedFactory(seed.toString());
 
@@ -14,4 +14,4 @@ function generateBaseMatrix(size, seed) {
   return matrix;
 }
 
-export default generateBaseMatrix;
+export default createRandomMatrix;
